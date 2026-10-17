@@ -1,0 +1,19 @@
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: fleetleak-worker-hpa
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: fleetleak-pipeline-worker
+  minReplicas: 2
+  maxReplicas: 16
+  metrics:
+  - type: External
+    external:
+      metric:
+        name: redpanda_consumer_lag_telemetry_raw
+      target:
+        type: Value
+        averageValue: "500"

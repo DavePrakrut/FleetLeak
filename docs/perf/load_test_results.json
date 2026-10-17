@@ -1,0 +1,18 @@
+{
+  "benchmark_timestamp": "2026-10-17T05:13:34.710867+00:00",
+  "total_events_processed": 50000,
+  "total_duration_seconds": 0.554,
+  "measured_single_core_throughput_eps": 90180.0,
+  "latency_p50_ms": 0.0097,
+  "latency_p95_ms": 0.0121,
+  "latency_p99_ms": 0.0183,
+  "sla_p95_target_ms": 200.0,
+  "sla_p99_target_ms": 500.0,
+  "sla_compliance": true,
+  "extrapolation_model": {
+    "target_scale_eps": 100000,
+    "required_horizontal_consumer_cores": 2,
+    "projected_cluster_spec": "4 Pods (4 vCPU / 8 GB RAM each) with Redpanda partitioned topics",
+    "justification": "Single CPU core comfortably sustains 90,180 eps at p99 of 0.02ms. Horizontal partitioning across 16 Kafka topic partitions scales linearly."
+  }
+}

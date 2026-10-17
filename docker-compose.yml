@@ -1,0 +1,156 @@
+services:
+  # ==============================================================================
+  # Redpanda: High-performance Kafka API compatible streaming broker
+  # ==============================================================================
+  redpanda:
+    image: docker.redpanda.com/redpandadata/redpanda:v24.2.7
+    container_name: fleetleak-redpanda
+    command:
+      - redpanda
+      - start
+      - --mode=dev-container
+      - --smp=1
+      - --memory=1G
+      - --overprovisioned
+      - --kafka-addr=PLAINTEXT://0.0.0.0:29092,OUTSIDE://0.0.0.0:9092
+      - --advertise-kafka-addr=PLAINTEXT://redpanda:29092,OUTSIDE://localhost:9092
+      - --pandaproxy-addr=0.0.0.0:8082
+      - --advertise-pandaproxy-addr=localhost:8082
+    ports:
+      - "9092:9092"
+      - "8082:8082"
+      - "9644:9644"
+    volumes:
+      - redpanda-data:/var/lib/redpanda/data
+    healthcheck:
+      test: ["CMD-SHELL", "rpk cluster info || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # Redpanda Console for visual cluster/topic inspection
+  console:
+    image: docker.redpanda.com/redpandadata/console:v2.7.2
+    container_name: fleetleak-console
+    depends_on:
+      redpanda:
+        condition: service_healthy
+    ports:
+      - "8080:8080"
+    environment:
+      KAFKA_BROKERS: redpanda:29092
+
+  # ==============================================================================
+  # PostgreSQL 16 + TimescaleDB + pgvector
+  # ==============================================================================
+  postgres:
+    image: timescale/timescaledb-ha:pg16
+    container_name: fleetleak-postgres
+    environment:
+      POSTGRES_USER: fleet_admin
+      POSTGRES_PASSWORD: fleet_secure_password_2026
+      POSTGRES_DB: fleetleak
+    ports:
+      - "5432:5432"
+    volumes:
+      - pg-data:/var/lib/postgresql/data
+      - ./db/migrations:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U fleet_admin -d fleetleak"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # ==============================================================================
+  # Redis: Hot state, deduplication keys, Bloom filter, token bucket rate limiter
+  # ==============================================================================
+  redis:
+    image: redis:7.4-alpine
+    container_name: fleetleak-redis
+    command: redis-server --appendonly yes
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # ==============================================================================
+  # MinIO: Cloud-agnostic S3 object storage for cold Parquet history & ML datasets
+  # ==============================================================================
+  minio:
+    image: minio/minio:RELEASE.2024-08-17T01-24-54Z
+    container_name: fleetleak-minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: fleet_minio_admin
+      MINIO_ROOT_PASSWORD: fleet_minio_secret_key
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio-data:/data
+
+  # ==============================================================================
+  # Core Platform Microservices
+  # ==============================================================================
+  api-service:
+    build:
+      context: .
+      dockerfile: infra/docker/Dockerfile.api
+    container_name: fleetleak-api
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      redpanda:
+        condition: service_healthy
+    env_file:
+      - .env.example
+    environment:
+      POSTGRES_HOST: postgres
+      REDIS_HOST: redis
+      KAFKA_BROKERS: redpanda:29092
+    ports:
+      - "8000:8000"
+
+  pipeline-worker:
+    build:
+      context: .
+      dockerfile: infra/docker/Dockerfile.worker
+    container_name: fleetleak-pipeline-worker
+    depends_on:
+      redpanda:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    env_file:
+      - .env.example
+    environment:
+      POSTGRES_HOST: postgres
+      REDIS_HOST: redis
+      KAFKA_BROKERS: redpanda:29092
+
+  web-ui:
+    build:
+      context: .
+      dockerfile: infra/docker/Dockerfile.web
+    container_name: fleetleak-web-ui
+    depends_on:
+      - api-service
+    ports:
+      - "3000:3000"
+    environment:
+      VITE_API_BASE_URL: http://localhost:8000
+
+volumes:
+  redpanda-data:
+  pg-data:
+  redis-data:
+  minio-data:
