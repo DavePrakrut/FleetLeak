@@ -9,7 +9,10 @@
 
 > **Submission for the Connected Vehicle Intelligence Hackathon (SRM x Talenciaglobal)**  
 > **Team Size**: 1 (Solo) | **Primary Engine**: PostgreSQL 16 + TimescaleDB + Redpanda + LightGBM  
-> **Target Scale**: 100,000+ Simulated Commercial Vehicles across 20 Tenants & Heterogeneous OEM Feeds
+> **Target Scale**: 100,000+ Simulated Commercial Vehicles across 20 Tenants & Heterogeneous OEM Feeds  
+> 
+> 📖 **[Comprehensive Technical Architecture & Deep Dive (PROJECT_EXPLANATION.md)](file:///c:/FleetLeak/PROJECT_EXPLANATION.md)**  
+> 🎬 **[Step-by-Step Live Website Demo & Evaluator Guide (WEBSITE_DEMO_GUIDE.md)](file:///c:/FleetLeak/WEBSITE_DEMO_GUIDE.md)**  
 
 ---
 
