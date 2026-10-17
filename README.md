@@ -159,7 +159,32 @@ python -m tests.chaos.chaos_kill_test
 
 ---
 
-## 8. Hackathon Submission Deliverables Index
+## 8. Environment Variables Reference
+
+| Variable Name | Default Value | Description |
+| :--- | :--- | :--- |
+| `POSTGRES_HOST` | `localhost` | TimescaleDB / PostgreSQL database hostname |
+| `POSTGRES_PORT` | `5432` | PostgreSQL listening port |
+| `POSTGRES_USER` | `fleet_admin` | Database username |
+| `POSTGRES_PASSWORD` | `fleet_secure_password_2026` | Database password |
+| `POSTGRES_DB` | `fleetleak` | Database name |
+| `REDIS_HOST` | `localhost` | Redis caching and Bloom filter hostname |
+| `REDIS_PORT` | `6379` | Redis port |
+| `KAFKA_BROKERS` | `localhost:9092` | Redpanda / Kafka broker endpoint |
+| `GEMINI_API_KEY` | *(Optional)* | Google Gemini 3.8 Flash live copilot key (falls back to rule engine if omitted) |
+| `JWT_SECRET_KEY` | `dev_insecure_jwt_secret_key_change_in_production_32b` | HS256 secret for authentication tokens |
+
+---
+
+## 9. Known Issues & Operational Limitations
+
+1. **Docker Host Resource Pressure on Low-Spec Machines**: Running all 7 containers simultaneously with continuous 100K event streaming requires at least 4 GB free RAM. For resource-constrained test environments, run the pre-seeded SQLite/Mock mode or start services selectively.
+2. **mTLS and Hardware HMAC at Edge**: X.509 device certificates and hardware CAN bus HMAC validation are architectural specifications designed for automotive telematics gateways and simulated via unit test mock certificates in the development pipeline.
+3. **LLM Cloud Rate Limits**: Under heavy consecutive agent red-teaming, the Gemini API may encounter upstream rate limits; the copilot automatically falls back to an offline rule-based financial reasoning engine.
+
+---
+
+## 10. Hackathon Submission Deliverables Index
 
 - [C4 Architecture Specification](file:///c:/FleetLeak/docs/architecture/c4_diagrams.md)
 - [3NF Entity Relationship Diagram (ERD)](file:///c:/FleetLeak/docs/erd/erd_diagram.md)
@@ -168,3 +193,4 @@ python -m tests.chaos.chaos_kill_test
 - [High-Throughput Load Test & Latency Report](file:///c:/FleetLeak/docs/perf/load_test_report.md)
 - [5-Minute Pitch & Live Demo Script](file:///c:/FleetLeak/docs/demo_video_script.md)
 - [Open Source Licenses & AI Declarations](file:///c:/FleetLeak/docs/declarations.md)
+
