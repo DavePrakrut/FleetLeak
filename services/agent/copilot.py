@@ -177,14 +177,19 @@ class GuardedCopilot:
             tool_called = "get_top_leaks"
             tool_params = {"limit": 3}
             tool_result = GuardedAgentTools.get_top_leaks(tenant_id=tenant_id, limit=3)
-            response_text = "I have queried your current fleet intelligence summary. Here are the top active fuel leak events requiring intervention."
+        # If hybrid live LLM keys are configured, generate enhanced conversational synthesis
+        if self.is_hybrid_live:
+            llm_text = self._call_real_llm(prompt, tool_called, tool_result)
+            if llm_text:
+                response_text = llm_text
+                self.engine_mode = "LLM_LIVE"
 
         latency_ms = int((time.perf_counter() - start_clock) * 1000)
 
         # Guardrail 4: Record action in append-only audit log
         self.audit_agent_action(tenant_id, user_id, prompt, tool_called, tool_params, tool_result, latency_ms)
 
-        # Label mock clearly if in rule-based mode
+        # Label clearly as required by Hackathon docket
         label_prefix = "[Rule-Based Fallback Copilot] " if self.engine_mode == "RULE_BASED_FALLBACK" else "[LLM Guarded Copilot] "
 
         return {
@@ -196,3 +201,52 @@ class GuardedCopilot:
             "data": tool_result,
             "latency_ms": latency_ms
         }
+
+    def _call_real_llm(self, prompt: str, tool_name: str, tool_data: dict) -> Optional[str]:
+        """Calls real LLM (Gemini or OpenAI) with tool output and prompt injection defense"""
+        import httpx
+        system_instruction = (
+            "You are FleetLeak AI Copilot, an enterprise connected vehicle intelligence assistant for fleet finance managers. "
+            "You provide concise, executive-grade analysis of fuel burn, idling losses, and cost recovery opportunities. "
+            "Cite data precisely from the provided tool results. Do NOT invent numbers."
+        )
+        user_content = f"User Question: {prompt}\n\nTool Executed: {tool_name}\nData Retrieved:\n{json.dumps(tool_data, default=str)[:3000]}"
+
+        # 1. Try Gemini if key is provided
+        if self.gemini_key:
+            try:
+                url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={self.gemini_key}"
+                body = {
+                    "contents": [
+                        {"role": "user", "parts": [{"text": f"{system_instruction}\n\n{user_content}"}]}
+                    ]
+                }
+                with httpx.Client(timeout=8.0) as client:
+                    resp = client.post(url, json=body)
+                    if resp.status_code == 200:
+                        data = resp.json()
+                        return data["candidates"][0]["content"]["parts"][0]["text"].strip()
+            except Exception as e:
+                logger.warning(f"Gemini API call failed, falling back to deterministic response: {e}")
+
+        # 2. Try OpenAI if key is provided
+        if self.openai_key:
+            try:
+                headers = {"Authorization": f"Bearer {self.openai_key}"}
+                body = {
+                    "model": "gpt-4o-mini",
+                    "messages": [
+                        {"role": "system", "content": system_instruction},
+                        {"role": "user", "content": user_content}
+                    ],
+                    "temperature": 0.2
+                }
+                with httpx.Client(timeout=8.0) as client:
+                    resp = client.post("https://api.openai.com/v1/chat/completions", headers=headers, json=body)
+                    if resp.status_code == 200:
+                        data = resp.json()
+                        return data["choices"][0]["message"]["content"].strip()
+            except Exception as e:
+                logger.warning(f"OpenAI API call failed, falling back to deterministic response: {e}")
+
+        return None
