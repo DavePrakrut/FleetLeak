@@ -60,6 +60,14 @@ def get_db():
         password=DB_PASS
     )
 
+import uuid
+
+def sanitize_uuid(val: Any, default: str = "11111111-1111-1111-1111-111111111111") -> str:
+    try:
+        return str(uuid.UUID(str(val)))
+    except Exception:
+        return default
+
 class GuardedCopilot:
     def __init__(self):
         self.openai_key = os.getenv("OPENAI_API_KEY", "").strip()
@@ -70,14 +78,16 @@ class GuardedCopilot:
     def audit_agent_action(self, tenant_id: str, user_id: str, prompt: str, tool_called: str, params: dict, result: dict, latency_ms: int):
         """Append-only audit record in agent_action_log"""
         try:
+            safe_tenant = sanitize_uuid(tenant_id, "11111111-1111-1111-1111-111111111111")
+            safe_user = sanitize_uuid(user_id, "f0000000-0000-0000-0000-000000000001")
             conn = get_db()
             cur = conn.cursor()
             cur.execute("""
                 INSERT INTO agent_action_log (tenant_id, user_id, prompt, tool_called, tool_parameters, result_summary, response_tokens, latency_ms)
                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s);
             """, (
-                tenant_id,
-                user_id,
+                safe_tenant,
+                safe_user,
                 prompt,
                 tool_called,
                 json.dumps(params),
@@ -101,12 +111,14 @@ class GuardedCopilot:
         5. Append-only Audit Trail.
         """
         start_clock = time.perf_counter()
+        safe_tenant = sanitize_uuid(tenant_id, "11111111-1111-1111-1111-111111111111")
+        safe_user = sanitize_uuid(user_id, "f0000000-0000-0000-0000-000000000001")
 
         # Guardrail 1: Prompt Injection Defense
         for pattern in INJECTION_PATTERNS:
             if pattern.search(prompt):
                 latency = int((time.perf_counter() - start_clock) * 1000)
-                self.audit_agent_action(tenant_id, user_id, prompt, "SECURITY_BLOCK", {"reason": "PROMPT_INJECTION_DETECTED"}, {}, latency)
+                self.audit_agent_action(safe_tenant, safe_user, prompt, "SECURITY_BLOCK", {"reason": "PROMPT_INJECTION_DETECTED"}, {}, latency)
                 return {
                     "status": "REFUSED",
                     "engine": self.engine_mode,
@@ -118,7 +130,7 @@ class GuardedCopilot:
         # Guardrail 2: Cross-tenant keyword defense
         if "other tenant" in prompt.lower() or "different tenant" in prompt.lower():
             latency = int((time.perf_counter() - start_clock) * 1000)
-            self.audit_agent_action(tenant_id, user_id, prompt, "SECURITY_BLOCK", {"reason": "CROSS_TENANT_QUERY_DENIED"}, {}, latency)
+            self.audit_agent_action(safe_tenant, safe_user, prompt, "SECURITY_BLOCK", {"reason": "CROSS_TENANT_QUERY_DENIED"}, {}, latency)
             return {
                 "status": "REFUSED",
                 "engine": self.engine_mode,
@@ -137,13 +149,13 @@ class GuardedCopilot:
         if "top leak" in prompt_lower or "worst" in prompt_lower or "losing money" in prompt_lower:
             tool_called = "get_top_leaks"
             tool_params = {"limit": 5}
-            tool_result = GuardedAgentTools.get_top_leaks(tenant_id=tenant_id, limit=5)
+            tool_result = GuardedAgentTools.get_top_leaks(tenant_id=safe_tenant, limit=5)
             response_text = f"Top fuel leaks identified for your fleet. Highest loss incident: {tool_result['leaks'][0]['license_plate']} ({tool_result['leaks'][0]['depot_name']}) at ${tool_result['leaks'][0]['estimated_cost_loss']:.2f} lost." if tool_result["leaks"] else "No open leaks detected."
 
         elif "depot" in prompt_lower and ("compare" in prompt_lower or "rank" in prompt_lower or "which" in prompt_lower):
             tool_called = "compare_depots"
             tool_params = {}
-            tool_result = GuardedAgentTools.compare_depots(tenant_id=tenant_id)
+            tool_result = GuardedAgentTools.compare_depots(tenant_id=safe_tenant)
             top_depot = tool_result["depots"][0]["depot_name"] if tool_result["depots"] else "N/A"
             response_text = f"Depot operational waste ranking complete. Highest leak expenditure observed at: {top_depot} with ${tool_result['depots'][0]['total_leak_cost_usd']:.2f} total fuel loss." if tool_result["depots"] else "No depot data found."
 
@@ -155,7 +167,7 @@ class GuardedCopilot:
                 "projected_monthly_savings": 540.00
             }
             tool_result = GuardedAgentTools.create_recommendation(
-                tenant_id=tenant_id,
+                tenant_id=safe_tenant,
                 depot_id=None,
                 title=tool_params["title"],
                 proposed_action=tool_params["proposed_action"],
@@ -170,13 +182,15 @@ class GuardedCopilot:
             if match:
                 pct = float(match.group(1))
             tool_params = {"idle_reduction_percent": pct}
-            tool_result = GuardedAgentTools.estimate_savings(tenant_id=tenant_id, idle_reduction_pct=pct)
+            tool_result = GuardedAgentTools.estimate_savings(tenant_id=safe_tenant, idle_reduction_pct=pct)
             response_text = f"If you reduce excessive idle by {pct:.0f}%, your fleet recovers ${tool_result['projected_monthly_savings_usd']:.2f}/month (${tool_result['projected_annual_savings_usd']:.2f}/year) and eliminates {tool_result['projected_annual_co2_reduced_metric_tons']:.1f} metric tons of CO2."
 
         else:
             tool_called = "get_top_leaks"
             tool_params = {"limit": 3}
-            tool_result = GuardedAgentTools.get_top_leaks(tenant_id=tenant_id, limit=3)
+            tool_result = GuardedAgentTools.get_top_leaks(tenant_id=safe_tenant, limit=3)
+            response_text = f"Analyzed active fleet leaks across telemetry streams. {len(tool_result.get('leaks', []))} incidents active."
+
         # If hybrid live LLM keys are configured, generate enhanced conversational synthesis
         if self.is_hybrid_live:
             llm_text = self._call_real_llm(prompt, tool_called, tool_result)
@@ -187,7 +201,7 @@ class GuardedCopilot:
         latency_ms = int((time.perf_counter() - start_clock) * 1000)
 
         # Guardrail 4: Record action in append-only audit log
-        self.audit_agent_action(tenant_id, user_id, prompt, tool_called, tool_params, tool_result, latency_ms)
+        self.audit_agent_action(safe_tenant, safe_user, prompt, tool_called, tool_params, tool_result, latency_ms)
 
         # Label clearly as required by Hackathon docket
         label_prefix = "[Rule-Based Fallback Copilot] " if self.engine_mode == "RULE_BASED_FALLBACK" else "[LLM Guarded Copilot] "
@@ -214,20 +228,21 @@ class GuardedCopilot:
 
         # 1. Try Gemini if key is provided
         if self.gemini_key:
-            try:
-                url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={self.gemini_key}"
-                body = {
-                    "contents": [
-                        {"role": "user", "parts": [{"text": f"{system_instruction}\n\n{user_content}"}]}
-                    ]
-                }
-                with httpx.Client(timeout=8.0) as client:
-                    resp = client.post(url, json=body)
-                    if resp.status_code == 200:
-                        data = resp.json()
-                        return data["candidates"][0]["content"]["parts"][0]["text"].strip()
-            except Exception as e:
-                logger.warning(f"Gemini API call failed, falling back to deterministic response: {e}")
+            for gemini_model in ["gemini-3.8-flash", "gemini-flash-latest"]:
+                try:
+                    url = f"https://generativelanguage.googleapis.com/v1beta/models/{gemini_model}:generateContent?key={self.gemini_key}"
+                    body = {
+                        "contents": [
+                            {"role": "user", "parts": [{"text": f"{system_instruction}\n\n{user_content}"}]}
+                        ]
+                    }
+                    with httpx.Client(timeout=8.0) as client:
+                        resp = client.post(url, json=body)
+                        if resp.status_code == 200:
+                            data = resp.json()
+                            return data["candidates"][0]["content"]["parts"][0]["text"].strip()
+                except Exception as e:
+                    logger.warning(f"Gemini API call ({gemini_model}) failed: {e}")
 
         # 2. Try OpenAI if key is provided
         if self.openai_key:
@@ -247,6 +262,6 @@ class GuardedCopilot:
                         data = resp.json()
                         return data["choices"][0]["message"]["content"].strip()
             except Exception as e:
-                logger.warning(f"OpenAI API call failed, falling back to deterministic response: {e}")
+                logger.warning(f"OpenAI API call failed: {e}")
 
         return None

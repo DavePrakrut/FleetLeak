@@ -86,12 +86,16 @@ def get_db_connection():
     )
 
 # Auth context dependency with Tenant Isolation
-def get_auth_context(credentials: Optional[HTTPAuthorizationCredentials] = Depends(security_scheme)) -> Dict[str, Any]:
+def get_auth_context(
+    request: Request,
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security_scheme)
+) -> Dict[str, Any]:
+    requested_tenant = request.headers.get("x-tenant-id") or "10000000-0000-0000-0000-000000000001"
     if not credentials:
-        # Default development fallback identity (Fleet Finance Manager of Tenant 1)
+        # Default development fallback identity (Fleet Finance Manager of Seeded Tenant 1)
         return {
             "user_id": "f0000000-0000-0000-0000-000000000001",
-            "tenant_id": "11111111-1111-1111-1111-111111111111",
+            "tenant_id": requested_tenant,
             "role": "fleet_manager",
             "email": "finance@apexlogistics.com"
         }

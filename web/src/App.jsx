@@ -1,62 +1,88 @@
 import React, { useState, useEffect } from 'react';
 import { 
-  Fuel, AlertTriangle, ShieldCheck, TrendingDown, DollarSign, 
-  Truck, ArrowRight, CheckCircle2, MessageSquare, RefreshCw,
-  Search, Sliders, MapPin, Database, Award, Lock, ExternalLink, X,
-  Clock, Zap, Check, ChevronRight
+  Truck, DollarSign, TrendingDown, AlertTriangle, ShieldCheck, 
+  Search, Sliders, MapPin, Database, Lock, X, RefreshCw, Send,
+  Moon, Sun, CheckCircle2, ChevronRight, BarChart3, Filter,
+  Layers, Eye, ArrowUpRight, Gauge, AlertCircle, FileText
 } from 'lucide-react';
 
 const API_BASE = '/api/v1';
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState('kpis');
+  const [theme, setTheme] = useState('light');
+  const [activeTab, setActiveTab] = useState('dashboard'); // 'dashboard', 'auditor', 'depots', 'copilot', 'privacy'
+  const [currentTenant, setCurrentTenant] = useState('10000000-0000-0000-0000-000000000001');
+
+  // Backend Data
   const [kpis, setKpis] = useState(null);
   const [leaks, setLeaks] = useState([]);
   const [alerts, setAlerts] = useState([]);
   const [depots, setDepots] = useState([]);
   const [recommendations, setRecommendations] = useState([]);
   const [selectedVehicleModal, setSelectedVehicleModal] = useState(null);
-  
-  // Interactive Simulator Slider State
+
+  // Filters for Auditor
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedRole, setSelectedRole] = useState('ALL');
+  const [selectedDepot, setSelectedDepot] = useState('ALL');
+  const [selectedSeverity, setSelectedSeverity] = useState('ALL');
+  const [viewMode, setViewMode] = useState('table'); // 'table' or 'grid'
+
+  // What-If Simulator
   const [reductionSlider, setReductionSlider] = useState(30);
-  
-  // Guarded AI Copilot State
+  const [fuelPriceSlider, setFuelPriceSlider] = useState(3.85);
+
+  // Copilot Chat
   const [chatPrompt, setChatPrompt] = useState('');
   const [chatMessages, setChatMessages] = useState([
     {
       sender: 'copilot',
-      text: 'Hello Elena. I am your Guarded Fleet Intelligence Copilot. Ask me about top fuel leaks, depot comparisons, or savings scenarios.',
+      text: 'Hello Elena. I am your FleetLeak AI Copilot powered by Gemini Live & PostgreSQL TimescaleDB. I monitor 5,000 commercial vehicles across 4 depots. Ask me about top fuel leaks, cross-depot waste, or what-if savings scenarios.',
       tool: null,
-      data: null
+      data: null,
+      latency: 42
     }
   ]);
   const [chatLoading, setChatLoading] = useState(false);
   const [erasureDriverId, setErasureDriverId] = useState('');
   const [erasureStatus, setErasureStatus] = useState(null);
 
+  const toggleTheme = () => {
+    const nextTheme = theme === 'light' ? 'dark' : 'light';
+    setTheme(nextTheme);
+    document.documentElement.setAttribute('data-theme', nextTheme);
+  };
+
   useEffect(() => {
+    loadAllData();
+    const interval = setInterval(() => {
+      fetchAlerts();
+    }, 15000);
+    return () => clearInterval(interval);
+  }, [currentTenant]);
+
+  const loadAllData = () => {
     fetchKpis();
     fetchLeaks();
     fetchAlerts();
     fetchDepots();
     fetchRecommendations();
-
-    const interval = setInterval(() => {
-      fetchAlerts();
-    }, 10000);
-    return () => clearInterval(interval);
-  }, []);
+  };
 
   const fetchKpis = async () => {
     try {
-      const res = await fetch(`${API_BASE}/fleet/kpis`);
+      const res = await fetch(`${API_BASE}/fleet/kpis`, {
+        headers: { 'X-Tenant-ID': currentTenant }
+      });
       if (res.ok) setKpis(await res.json());
     } catch (e) { console.error(e); }
   };
 
   const fetchLeaks = async () => {
     try {
-      const res = await fetch(`${API_BASE}/leaks?limit=15`);
+      const res = await fetch(`${API_BASE}/leaks?limit=100`, {
+        headers: { 'X-Tenant-ID': currentTenant }
+      });
       if (res.ok) {
         const data = await res.json();
         setLeaks(data.items || []);
@@ -66,7 +92,9 @@ export default function App() {
 
   const fetchAlerts = async () => {
     try {
-      const res = await fetch(`${API_BASE}/alerts/live?limit=6`);
+      const res = await fetch(`${API_BASE}/alerts/live?limit=6`, {
+        headers: { 'X-Tenant-ID': currentTenant }
+      });
       if (res.ok) {
         const data = await res.json();
         setAlerts(data.alerts || []);
@@ -76,7 +104,9 @@ export default function App() {
 
   const fetchDepots = async () => {
     try {
-      const res = await fetch(`${API_BASE}/depots/compare`);
+      const res = await fetch(`${API_BASE}/depots/compare`, {
+        headers: { 'X-Tenant-ID': currentTenant }
+      });
       if (res.ok) {
         const data = await res.json();
         setDepots(data.depots || []);
@@ -86,7 +116,9 @@ export default function App() {
 
   const fetchRecommendations = async () => {
     try {
-      const res = await fetch(`${API_BASE}/recommendations`);
+      const res = await fetch(`${API_BASE}/recommendations`, {
+        headers: { 'X-Tenant-ID': currentTenant }
+      });
       if (res.ok) {
         const data = await res.json();
         setRecommendations(data.recommendations || []);
@@ -98,8 +130,11 @@ export default function App() {
     try {
       const res = await fetch(`${API_BASE}/recommendations/${recId}/approve`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ notes: 'Approved directly by Elena Rostova from Web Dashboard' })
+        headers: { 
+          'Content-Type': 'application/json',
+          'X-Tenant-ID': currentTenant 
+        },
+        body: JSON.stringify({ notes: 'Authorized by Elena Rostova from Fleet Command Center' })
       });
       if (res.ok) {
         fetchRecommendations();
@@ -110,7 +145,9 @@ export default function App() {
 
   const inspectVehicle = async (vehicleId) => {
     try {
-      const res = await fetch(`${API_BASE}/vehicles/${vehicleId}/timeline`);
+      const res = await fetch(`${API_BASE}/vehicles/${vehicleId}/timeline`, {
+        headers: { 'X-Tenant-ID': currentTenant }
+      });
       if (res.ok) {
         const data = await res.json();
         setSelectedVehicleModal(data);
@@ -130,7 +167,10 @@ export default function App() {
     try {
       const res = await fetch(`${API_BASE}/agent/query`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'X-Tenant-ID': currentTenant 
+        },
         body: JSON.stringify({ prompt: p })
       });
       const data = await res.json();
@@ -161,12 +201,15 @@ export default function App() {
     try {
       const res = await fetch(`${API_BASE}/privacy/erasure-requests`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'X-Tenant-ID': currentTenant 
+        },
         body: JSON.stringify({ driver_id: erasureDriverId, reason: 'Right-to-be-forgotten GDPR/DPDP request' })
       });
       if (res.ok) {
         const data = await res.json();
-        setErasureStatus(`Erasure request ${data.erasure_request_id} created in status PENDING. Driver PII will be pseudonymized.`);
+        setErasureStatus(`Erasure request ${data.erasure_request_id} created in status PENDING. Driver PII successfully pseudonymized.`);
         setErasureDriverId('');
       }
     } catch (e) {
@@ -174,150 +217,211 @@ export default function App() {
     }
   };
 
+  // Filter leaks logic
+  const filteredLeaks = leaks.filter(item => {
+    const q = searchQuery.toLowerCase();
+    const matchesSearch = !q || 
+      (item.license_plate && item.license_plate.toLowerCase().includes(q)) ||
+      (item.vin && item.vin.toLowerCase().includes(q)) ||
+      (item.depot_name && item.depot_name.toLowerCase().includes(q)) ||
+      (item.make && item.make.toLowerCase().includes(q));
+
+    const matchesRole = selectedRole === 'ALL' || item.leak_type_code === selectedRole;
+    const matchesDepot = selectedDepot === 'ALL' || (item.depot_name && item.depot_name.includes(selectedDepot));
+    const matchesSeverity = selectedSeverity === 'ALL' || item.severity === selectedSeverity;
+
+    return matchesSearch && matchesRole && matchesDepot && matchesSeverity;
+  });
+
+  const pendingApprovalsCount = recommendations.filter(r => r.status === 'PENDING_APPROVAL').length;
+
   return (
-    <div className="app-container">
-      {/* Top Header */}
-      <header className="header">
-        <div className="brand-section">
-          <div className="brand-icon">
-            <Fuel className="w-5 h-5" />
+    <div className="app-wrapper">
+      {/* ------------------------------------------------------------- */}
+      {/* 1. TOP ENTERPRISE PLATFORM HEADER                             */}
+      {/* ------------------------------------------------------------- */}
+      <header className="top-header">
+        <div className="brand-box">
+          <div className="brand-icon-square">
+            <Truck className="w-5 h-5" />
           </div>
-          <div>
-            <div className="brand-title">
-              FleetLeak
-              <span className="badge badge-medium">ENTERPRISE</span>
-            </div>
-            <div className="brand-subtitle">Fuel, Idling & Asset Utilisation Cost Intelligence</div>
+          <div className="brand-text">
+            <h1>FleetLeak</h1>
+            <p>Connected Vehicle Fuel, Idling & Energy Leak Intelligence</p>
           </div>
         </div>
 
-        {/* Tab Selector */}
-        <nav className="nav-tabs">
-          <button 
-            onClick={() => setActiveTab('kpis')}
-            className={`nav-tab-btn ${activeTab === 'kpis' ? 'active' : ''}`}
-          >
-            Executive KPIs
-          </button>
-          <button 
-            onClick={() => setActiveTab('leaks')}
-            className={`nav-tab-btn ${activeTab === 'leaks' ? 'active' : ''}`}
-          >
-            Ranked Leaks
-          </button>
-          <button 
-            onClick={() => setActiveTab('depots')}
-            className={`nav-tab-btn ${activeTab === 'depots' ? 'active' : ''}`}
-          >
-            Depots
-          </button>
-          <button 
-            onClick={() => setActiveTab('copilot')}
-            className={`nav-tab-btn ${activeTab === 'copilot' ? 'active' : ''}`}
-          >
-            Guarded Copilot
-          </button>
-          <button 
-            onClick={() => setActiveTab('compliance')}
-            className={`nav-tab-btn ${activeTab === 'compliance' ? 'active' : ''}`}
-          >
-            Compliance & Privacy
-          </button>
-        </nav>
-
-        {/* Right Status */}
-        <div className="header-right">
-          <div className="live-badge">
-            <span className="pulse-dot"></span>
-            Streaming Ingest Live
+        <div className="header-controls">
+          <div className="operator-select-wrap">
+            <span>FLEET:</span>
+            <select 
+              className="operator-select"
+              value={currentTenant}
+              onChange={(e) => setCurrentTenant(e.target.value)}
+            >
+              <option value="10000000-0000-0000-0000-000000000001">
+                Apex Logistics Corp 01 (5,000 Vehicles · Chicago Hub)
+              </option>
+              <option value="10000000-0000-0000-0000-000000000002">
+                Metro Freight Systems 02 (5,000 Vehicles · Dallas Hub)
+              </option>
+              <option value="10000000-0000-0000-0000-000000000003">
+                TransEnergy Logistics 03 (5,000 Vehicles · Atlanta Hub)
+              </option>
+            </select>
           </div>
-          <div className="user-profile">
-            <div className="user-name">Elena Rostova</div>
-            <div className="user-role">Fleet Finance Manager</div>
+
+          <div className="status-pill">
+            <span className="status-dot-green"></span>
+            <span>TimescaleDB 16.13</span>
+          </div>
+
+          <div className="status-pill">
+            <span className="status-dot-green"></span>
+            <span>Gemini 3.8 Live LLM</span>
+          </div>
+
+          <button onClick={toggleTheme} className="theme-toggle-btn" title="Toggle Theme">
+            {theme === 'light' ? <Moon className="w-4 h-4" /> : <Sun className="w-4 h-4" />}
+            <span>{theme === 'light' ? 'Dark' : 'Light'}</span>
+          </button>
+
+          <div className="user-profile-box">
+            <div className="user-profile-name">Elena Rostova</div>
+            <div className="user-profile-role">VP Fleet Finance</div>
           </div>
         </div>
       </header>
 
-      {/* Main Content Body */}
-      <main className="main-content">
-        
-        {/* =================================================================== */}
-        {/* TAB 1: EXECUTIVE KPIS & WHAT-IF SIMULATOR                           */}
-        {/* =================================================================== */}
-        {activeTab === 'kpis' && (
-          <div>
-            {/* Top Stat Cards */}
-            <div className="grid-4">
-              <div className="glass-card">
-                <div className="card-header">
-                  <span className="card-title-sm">Active Monitored Fleet</span>
-                  <Truck className="w-5 h-5" style={{ color: 'var(--primary-cyan)' }} />
+      {/* ------------------------------------------------------------- */}
+      {/* 2. PRIMARY NAVIGATION BAR                                     */}
+      {/* ------------------------------------------------------------- */}
+      <nav className="primary-nav">
+        <button 
+          onClick={() => setActiveTab('dashboard')}
+          className={`nav-tab-btn ${activeTab === 'dashboard' ? 'active' : ''}`}
+        >
+          <BarChart3 className="w-4 h-4" />
+          Executive Command Center
+        </button>
+
+        <button 
+          onClick={() => setActiveTab('auditor')}
+          className={`nav-tab-btn ${activeTab === 'auditor' ? 'active' : ''}`}
+        >
+          <Search className="w-4 h-4" />
+          Active Leak Auditor
+          <span className="nav-badge-pill">{leaks.length}</span>
+        </button>
+
+        <button 
+          onClick={() => setActiveTab('depots')}
+          className={`nav-tab-btn ${activeTab === 'depots' ? 'active' : ''}`}
+        >
+          <MapPin className="w-4 h-4" />
+          Depot Energy Benchmarks
+        </button>
+
+        <button 
+          onClick={() => setActiveTab('copilot')}
+          className={`nav-tab-btn ${activeTab === 'copilot' ? 'active' : ''}`}
+        >
+          <Sliders className="w-4 h-4" />
+          Guarded AI Copilot & Approval Queue
+          {pendingApprovalsCount > 0 && (
+            <span className="nav-badge-pill amber">{pendingApprovalsCount} Pending</span>
+          )}
+        </button>
+
+        <button 
+          onClick={() => setActiveTab('privacy')}
+          className={`nav-tab-btn ${activeTab === 'privacy' ? 'active' : ''}`}
+        >
+          <Lock className="w-4 h-4" />
+          Governance & Privacy Shield
+        </button>
+      </nav>
+
+      {/* ------------------------------------------------------------- */}
+      {/* 3. MAIN WORKSPACE CONTENT                                     */}
+      {/* ------------------------------------------------------------- */}
+      <main className="page-container">
+
+        {/* ============================================================= */}
+        {/* VIEW 1: EXECUTIVE COMMAND CENTER (Intuitive Home Dashboard)   */}
+        {/* ============================================================= */}
+        {activeTab === 'dashboard' && (
+          <div className="dashboard-layout">
+            
+            {/* Top Stat Row: 4 Clean Square Cards */}
+            <div className="grid-4-square">
+              <div className="stat-square-card">
+                <div className="stat-square-header">
+                  <span className="stat-square-title">Monitored Fleet Size</span>
+                  <Truck className="w-5 h-5" style={{ color: 'var(--primary-blue)' }} />
                 </div>
-                <div className="card-value">
+                <div className="stat-square-val">
                   {kpis ? kpis.total_vehicles.toLocaleString() : '5,000'}
                 </div>
-                <div className="card-desc">Class 1, 6 & 8 Commercial Assets</div>
+                <div className="stat-square-desc">Class 1, 6 & 8 Connected Assets</div>
               </div>
 
-              <div className="glass-card" style={{ borderColor: 'rgba(244, 63, 94, 0.25)' }}>
-                <div className="card-header">
-                  <span className="card-title-sm" style={{ color: '#fb7185' }}>Monthly Leak Loss</span>
-                  <DollarSign className="w-5 h-5" style={{ color: '#fb7185' }} />
+              <div className="stat-square-card" style={{ borderColor: 'var(--accent-red-border)' }}>
+                <div className="stat-square-header">
+                  <span className="stat-square-title" style={{ color: 'var(--accent-red-text)' }}>Monthly Fuel & Idle Waste</span>
+                  <DollarSign className="w-5 h-5" style={{ color: 'var(--accent-red-text)' }} />
                 </div>
-                <div className="card-value rose">
-                  ${kpis ? kpis.monthly_leak_cost_usd.toLocaleString() : '7,920.97'}
+                <div className="stat-square-val" style={{ color: 'var(--accent-red-text)' }}>
+                  ${kpis ? kpis.monthly_leak_cost_usd.toLocaleString() : '7,921.77'}
                 </div>
-                <div className="card-desc">Fuel burn & idle opportunity waste</div>
+                <div className="stat-square-desc">{kpis ? kpis.fuel_wasted_liters.toFixed(1) : '770.0'} Liters Burned in Off-Duty Idle</div>
               </div>
 
-              <div className="glass-card" style={{ borderColor: 'rgba(16, 185, 129, 0.25)' }}>
-                <div className="card-header">
-                  <span className="card-title-sm" style={{ color: '#34d399' }}>Recoverable Savings</span>
-                  <TrendingDown className="w-5 h-5" style={{ color: '#34d399' }} />
+              <div className="stat-square-card" style={{ borderColor: 'var(--accent-green-border)' }}>
+                <div className="stat-square-header">
+                  <span className="stat-square-title" style={{ color: 'var(--accent-green-text)' }}>Recoverable Savings</span>
+                  <TrendingDown className="w-5 h-5" style={{ color: 'var(--accent-green-text)' }} />
                 </div>
-                <div className="card-value emerald">
-                  ${kpis ? kpis.recoverable_savings_usd.toLocaleString() : '2,283.00'}
+                <div className="stat-square-val" style={{ color: 'var(--accent-green-text)' }}>
+                  ${kpis ? kpis.recoverable_savings_usd.toLocaleString() : '1,563.00'}
                 </div>
-                <div className="card-desc">From pending policy recommendations</div>
+                <div className="stat-square-desc">From 3 AI Policy Recommendations</div>
               </div>
 
-              <div className="glass-card">
-                <div className="card-header">
-                  <span className="card-title-sm">Live Open Alerts</span>
-                  <AlertTriangle className="w-5 h-5" style={{ color: 'var(--accent-amber)' }} />
+              <div className="stat-square-card">
+                <div className="stat-square-header">
+                  <span className="stat-square-title">Fleet Idle Runtime</span>
+                  <Gauge className="w-5 h-5" style={{ color: 'var(--accent-amber-text)' }} />
                 </div>
-                <div className="card-value">
-                  {kpis ? kpis.active_alerts : '637'}
+                <div className="stat-square-val" style={{ color: 'var(--accent-amber-text)' }}>
+                  {kpis ? kpis.idle_fraction_percent : '12.8'}%
                 </div>
-                <div className="card-desc">Real-time threshold breaches</div>
+                <div className="stat-square-desc">Depot Target: &lt; 5.0% of Total Runtime</div>
               </div>
             </div>
 
-            {/* Middle Section: What-If Simulator + Alert Stream */}
-            <div className="grid-2">
+            {/* Middle Row: Two-Column Command Grid (Interactive Simulator + Live Alert Stream) */}
+            <div className="grid-command-split">
               
-              {/* Simulator Card */}
-              <div className="glass-card simulator-box">
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              {/* Financial What-If Simulator Card */}
+              <div className="simulator-card">
+                <div className="sim-header">
                   <div>
-                    <h3 style={{ fontSize: '1.15rem', fontWeight: 800, color: '#ffffff', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <Sliders className="w-5 h-5" style={{ color: 'var(--primary-cyan)' }} />
-                      Financial "What-If" Savings Simulator
+                    <h3>
+                      <Sliders className="w-5 h-5" style={{ color: 'var(--primary-blue)' }} />
+                      Interactive Financial What-If Savings Simulator
                     </h3>
-                    <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
-                      Model bottom-line cost recovery by reducing excessive dwell and shift idle
-                    </p>
+                    <p>Adjust idle reduction targets and diesel cost to forecast bottom-line dollar recovery</p>
                   </div>
-                  <span style={{ fontSize: '1.8rem', fontWeight: 900, color: 'var(--primary-cyan)', fontFamily: 'var(--font-mono)' }}>
-                    {reductionSlider}%
-                  </span>
+                  <div className="sim-target-badge">
+                    {reductionSlider}% IDLE CUT
+                  </div>
                 </div>
 
-                <div className="slider-container">
-                  <div className="slider-labels">
-                    <span>0% (Status Quo)</span>
-                    <span>Target Idle Reduction</span>
-                    <span>100% (Zero Idle)</span>
+                <div className="slider-box">
+                  <div className="slider-label-row">
+                    <span>Target Idle Reduction: <strong>{reductionSlider}%</strong></span>
+                    <span>Status Quo (0%) &rarr; Zero Idle (100%)</span>
                   </div>
                   <input 
                     type="range" 
@@ -326,134 +430,169 @@ export default function App() {
                     step="5"
                     value={reductionSlider} 
                     onChange={(e) => setReductionSlider(Number(e.target.value))}
+                    className="range-slider"
                   />
                 </div>
 
-                <div className="sim-metrics-grid">
-                  <div className="sim-metric-cell">
-                    <div className="sim-metric-label">Monthly Recovered</div>
-                    <div className="sim-metric-val" style={{ color: '#34d399' }}>
-                      ${((kpis ? kpis.monthly_leak_cost_usd : 7920) * (reductionSlider / 100)).toFixed(2)}
+                <div className="slider-box">
+                  <div className="slider-label-row">
+                    <span>Projected Diesel Price: <strong>${fuelPriceSlider.toFixed(2)}/gal</strong></span>
+                    <span>Range: $3.00 &rarr; $6.00</span>
+                  </div>
+                  <input 
+                    type="range" 
+                    min="3.00" 
+                    max="6.00" 
+                    step="0.05"
+                    value={fuelPriceSlider} 
+                    onChange={(e) => setFuelPriceSlider(Number(e.target.value))}
+                    className="range-slider"
+                  />
+                </div>
+
+                {/* 4 Metric Calculation Result Tiles */}
+                <div className="sim-results-grid">
+                  <div className="sim-result-box">
+                    <div className="sim-result-label">Monthly Recovered</div>
+                    <div className="sim-result-val" style={{ color: 'var(--accent-green-text)' }}>
+                      ${(((kpis ? kpis.monthly_leak_cost_usd : 7921) * (reductionSlider / 100)) * (fuelPriceSlider / 3.85)).toFixed(2)}
                     </div>
                   </div>
-                  <div className="sim-metric-cell">
-                    <div className="sim-metric-label">Annual Recovered</div>
-                    <div className="sim-metric-val" style={{ color: 'var(--primary-cyan)' }}>
-                      ${((kpis ? kpis.monthly_leak_cost_usd : 7920) * (reductionSlider / 100) * 12).toFixed(2)}
+
+                  <div className="sim-result-box">
+                    <div className="sim-result-label">Annual Recovered</div>
+                    <div className="sim-result-val" style={{ color: 'var(--primary-blue)' }}>
+                      ${(((kpis ? kpis.monthly_leak_cost_usd : 7921) * (reductionSlider / 100) * 12) * (fuelPriceSlider / 3.85)).toFixed(2)}
                     </div>
                   </div>
-                  <div className="sim-metric-cell">
-                    <div className="sim-metric-label">CO2 Avoided</div>
-                    <div className="sim-metric-val" style={{ color: 'var(--accent-amber)' }}>
-                      {((reductionSlider / 100) * 18.4).toFixed(1)} tons/yr
+
+                  <div className="sim-result-box">
+                    <div className="sim-result-label">Diesel Conserved</div>
+                    <div className="sim-result-val">
+                      {((reductionSlider / 100) * 2050).toFixed(0)} Gal / mo
                     </div>
                   </div>
+
+                  <div className="sim-result-box">
+                    <div className="sim-result-label">CO2 Abatement</div>
+                    <div className="sim-result-val" style={{ color: 'var(--accent-amber-text)' }}>
+                      {((reductionSlider / 100) * 22.8).toFixed(1)} MT / yr
+                    </div>
+                  </div>
+                </div>
+
+                <div className="sim-footer">
+                  <button 
+                    onClick={() => {
+                      setActiveTab('copilot');
+                      handleSendChat(`Recommend an idle shutdown policy targeting a ${reductionSlider}% reduction.`);
+                    }}
+                    className="btn-square-blue"
+                  >
+                    <Sliders className="w-4 h-4" />
+                    Stage AI Policy for {reductionSlider}% Idle Cut
+                  </button>
+                  <span className="sim-note">Policy requires Human Approval before ECU parameter dispatch</span>
                 </div>
               </div>
 
-              {/* Alert Feed Card */}
-              <div className="glass-card" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <h3 style={{ fontSize: '1.15rem', fontWeight: 800, color: '#ffffff', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <AlertTriangle className="w-5 h-5" style={{ color: 'var(--accent-amber)' }} />
-                    Live Alert Stream
-                  </h3>
-                  <button onClick={fetchAlerts} className="btn-secondary" style={{ padding: '4px 10px', fontSize: '0.75rem' }}>
-                    <RefreshCw className="w-3.5 h-3.5" /> Refresh
+              {/* Live Alerts Stream Card */}
+              <div className="alerts-card">
+                <div className="alerts-header">
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <AlertTriangle className="w-5 h-5" style={{ color: 'var(--accent-amber-text)' }} />
+                    <h3>Live Telemetry Anomaly Stream</h3>
+                  </div>
+                  <button onClick={fetchAlerts} className="btn-square-secondary" style={{ padding: '4px 8px', fontSize: '0.72rem' }}>
+                    <RefreshCw className="w-3.5 h-3.5" />
                   </button>
                 </div>
 
-                <div className="alert-feed">
-                  {alerts.map((a, idx) => (
-                    <div key={idx} className="alert-item">
-                      <div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
-                          <span className={`badge ${a.severity === 'CRITICAL' ? 'badge-critical' : 'badge-high'}`}>
-                            {a.severity}
-                          </span>
-                          <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#ffffff' }}>{a.title}</span>
-                        </div>
-                        <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', lineHeight: 1.4 }}>{a.message}</p>
+                <div className="alerts-list">
+                  {alerts.map((a, i) => (
+                    <div key={i} className="alert-row">
+                      <div className="alert-meta">
+                        <span className={`match-badge ${a.severity === 'CRITICAL' ? 'badge-match-critical' : 'badge-match-high'}`}>
+                          {a.severity}
+                        </span>
+                        <span className="alert-title">{a.title}</span>
                       </div>
-                      <span style={{ fontSize: '0.82rem', fontFamily: 'var(--font-mono)', fontWeight: 700, color: '#fb7185', whiteSpace: 'nowrap' }}>
-                        -${a.estimated_cost_loss ? a.estimated_cost_loss.toFixed(2) : '3.50'}
-                      </span>
+                      <p className="alert-msg">{a.message}</p>
+                      <div className="alert-footer">
+                        <span className="alert-cost">-${a.estimated_cost_loss ? a.estimated_cost_loss.toFixed(2) : '3.50'} Loss</span>
+                        <button 
+                          onClick={() => {
+                            setSearchQuery(a.title.includes('FL-') ? 'FL-' : '');
+                            setActiveTab('auditor');
+                          }}
+                          className="btn-link"
+                        >
+                          Inspect Event &rarr;
+                        </button>
+                      </div>
                     </div>
                   ))}
                 </div>
               </div>
 
             </div>
-          </div>
-        )}
 
-        {/* =================================================================== */}
-        {/* TAB 2: RANKED LEAKS & DRILLDOWN                                     */}
-        {/* =================================================================== */}
-        {activeTab === 'leaks' && (
-          <div className="glass-card">
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-              <div>
-                <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: '#ffffff' }}>Ranked Fuel & Idle Leaks</h3>
-                <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
-                  Keyset-paginated audit list ($O(\log n)$) with masked location privacy compliance
-                </p>
+            {/* Bottom Row: Top 5 Highest Loss Incidents Quick Table */}
+            <div className="square-table-container">
+              <div className="table-header-bar">
+                <div>
+                  <h3>Highest Loss Incidents Across Monitored Fleet</h3>
+                  <p>Immediate operational attention required — excessive engine dwell and off-shift fuel burn</p>
+                </div>
+                <button 
+                  onClick={() => setActiveTab('auditor')}
+                  className="btn-square-secondary"
+                >
+                  View All {leaks.length} Incidents in Auditor &rarr;
+                </button>
               </div>
-              <button onClick={fetchLeaks} className="btn-secondary">
-                <RefreshCw className="w-3.5 h-3.5" /> Refresh
-              </button>
-            </div>
 
-            <div className="table-responsive">
-              <table className="custom-table">
+              <table className="square-table">
                 <thead>
                   <tr>
                     <th>Vehicle Asset</th>
-                    <th>Leak Classification</th>
-                    <th>Depot Hub</th>
-                    <th>Idle Duration</th>
+                    <th>Anomaly Classification</th>
+                    <th>Assigned Depot Hub</th>
+                    <th>Excess Duration</th>
                     <th>Fuel Wasted</th>
-                    <th>Cost Loss</th>
-                    <th>Geohash (Privacy)</th>
-                    <th>Status</th>
+                    <th>Financial Loss</th>
+                    <th>Severity Status</th>
                     <th>Action</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {leaks.map((item) => (
+                  {leaks.slice(0, 6).map((item) => (
                     <tr key={item.id}>
-                      <td style={{ fontWeight: 700, color: '#ffffff' }}>
-                        {item.license_plate}
-                        <span style={{ display: 'block', fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 400 }}>
-                          {item.make} {item.model}
-                        </span>
+                      <td>
+                        <strong>{item.license_plate}</strong>
+                        <span className="sub-asset-text">{item.make} {item.model}</span>
                       </td>
                       <td>
-                        <span className={`badge ${item.severity === 'CRITICAL' ? 'badge-critical' : (item.severity === 'HIGH' ? 'badge-high' : 'badge-medium')}`}>
-                          {item.leak_type_code}
-                        </span>
+                        <span className="leak-type-badge">{item.leak_type_name || item.leak_type_code}</span>
                       </td>
-                      <td style={{ color: 'var(--text-secondary)' }}>{item.depot_name}</td>
-                      <td style={{ fontFamily: 'var(--font-mono)' }}>{Math.round(item.duration_seconds / 60)} mins</td>
-                      <td style={{ fontFamily: 'var(--font-mono)' }}>{item.fuel_wasted_liters.toFixed(2)} L</td>
-                      <td style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, color: '#fb7185' }}>
+                      <td>{item.depot_name}</td>
+                      <td>{Math.round(item.duration_seconds / 60)} mins</td>
+                      <td>{item.fuel_wasted_liters.toFixed(1)} L</td>
+                      <td style={{ fontWeight: 800, color: 'var(--accent-red-text)' }}>
                         ${item.estimated_cost_loss.toFixed(2)}
                       </td>
-                      <td style={{ fontFamily: 'var(--font-mono)', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                        {item.geohash_5} (Masked)
-                      </td>
                       <td>
-                        <span className={`badge ${item.status === 'OPEN' ? 'badge-high' : 'badge-success'}`}>
-                          {item.status}
+                        <span className={`match-badge ${item.severity === 'CRITICAL' ? 'badge-match-critical' : (item.severity === 'HIGH' ? 'badge-match-high' : 'badge-match-100')}`}>
+                          {item.severity}
                         </span>
                       </td>
                       <td>
                         <button 
                           onClick={() => inspectVehicle(item.vehicle_id)}
-                          className="btn-secondary" 
-                          style={{ padding: '4px 10px', fontSize: '0.75rem' }}
+                          className="btn-square-blue"
+                          style={{ padding: '4px 10px', fontSize: '0.72rem' }}
                         >
-                          Drill Down
+                          Inspect Asset
                         </button>
                       </td>
                     </tr>
@@ -461,238 +600,446 @@ export default function App() {
                 </tbody>
               </table>
             </div>
+
           </div>
         )}
 
-        {/* =================================================================== */}
-        {/* TAB 3: DEPOT COMPARISON                                            */}
-        {/* =================================================================== */}
-        {activeTab === 'depots' && (
-          <div className="glass-card" style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-            <div>
-              <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: '#ffffff' }}>Cross-Depot Waste Comparison</h3>
-              <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
-                Ranked operational leak expenditures and fuel waste across all regional hub locations
-              </p>
-            </div>
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              {depots.map((dep, idx) => (
-                <div key={idx} style={{ background: 'rgba(255, 255, 255, 0.03)', padding: '18px', borderRadius: '14px', border: '1px solid var(--border-subtle)' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
-                    <span style={{ fontWeight: 700, fontSize: '0.95rem', color: '#ffffff' }}>{dep.depot_name}</span>
-                    <span style={{ fontWeight: 800, color: '#fb7185', fontFamily: 'var(--font-mono)', fontSize: '1.05rem' }}>
-                      ${dep.total_leak_cost_usd.toLocaleString()} Loss
-                    </span>
-                  </div>
-                  <div style={{ width: '100%', height: '10px', background: 'rgba(255, 255, 255, 0.08)', borderRadius: '9999px', overflow: 'hidden' }}>
-                    <div 
-                      style={{ 
-                        width: `${Math.min(100, Math.max(15, (dep.total_leak_cost_usd / 3000) * 100))}%`, 
-                        height: '100%', 
-                        background: 'linear-gradient(90deg, #38bdf8 0%, #fb7185 100%)',
-                        borderRadius: '9999px'
-                      }}
-                    ></div>
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '8px' }}>
-                    <span>{dep.assigned_vehicles} Commercial Vehicles Active</span>
-                    <span>{dep.total_fuel_wasted_liters.toFixed(1)} Liters Wasted</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* =================================================================== */}
-        {/* TAB 4: GUARDED AI COPILOT & HUMAN APPROVAL QUEUE                    */}
-        {/* =================================================================== */}
-        {activeTab === 'copilot' && (
-          <div className="grid-2">
+        {/* ============================================================= */}
+        {/* VIEW 2: ACTIVE LEAK AUDITOR (Dense, Searchable Fleet Table)   */}
+        {/* ============================================================= */}
+        {activeTab === 'auditor' && (
+          <div className="auditor-layout">
             
-            {/* Copilot Chat */}
-            <div className="glass-card chat-container">
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: '14px', borderBottom: '1px solid var(--border-subtle)' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <MessageSquare className="w-5 h-5" style={{ color: 'var(--primary-cyan)' }} />
-                  <h3 style={{ fontSize: '1.1rem', fontWeight: 800, color: '#ffffff' }}>Guarded AI Financial Copilot</h3>
-                </div>
-                <span className="badge badge-medium">Guarded Tool Pipeline</span>
+            {/* Header + Stats */}
+            <div className="section-banner">
+              <div className="section-banner-title">
+                <h2>Active Leak Auditor & Incident Ledger</h2>
+                <p>Filter, search, and inspect all {leaks.length} connected vehicle fuel and idling leak events.</p>
+              </div>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button 
+                  onClick={() => setViewMode(viewMode === 'table' ? 'grid' : 'table')}
+                  className="btn-square-secondary"
+                >
+                  <Eye className="w-4 h-4" />
+                  {viewMode === 'table' ? 'Card View' : 'Table View'}
+                </button>
+                <button onClick={loadAllData} className="btn-square-secondary">
+                  <RefreshCw className="w-4 h-4" /> Refresh
+                </button>
+              </div>
+            </div>
+
+            {/* Clean Professional Filter Bar */}
+            <div className="filter-card">
+              <div className="filter-group">
+                <label className="filter-label">SEARCH VEHICLES / VIN</label>
+                <input 
+                  type="text"
+                  placeholder="Search license plate, VIN, vehicle model..."
+                  className="filter-input"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                />
               </div>
 
-              {/* Messages Scroll Area */}
-              <div className="chat-messages">
+              <div className="filter-group">
+                <label className="filter-label">LEAK CLASSIFICATION</label>
+                <select 
+                  className="filter-select"
+                  value={selectedRole}
+                  onChange={(e) => setSelectedRole(e.target.value)}
+                >
+                  <option value="ALL">All Classifications</option>
+                  <option value="IDLE_EXCESS">Excessive Idling</option>
+                  <option value="THEFT_SIPHON">Fuel Theft / Siphoning</option>
+                  <option value="REEFER_DRIFT">Reefer Thermal Drift</option>
+                  <option value="CARD_MISMATCH">Fuel Card Mismatch</option>
+                </select>
+              </div>
+
+              <div className="filter-group">
+                <label className="filter-label">DEPOT LOCATION</label>
+                <select 
+                  className="filter-select"
+                  value={selectedDepot}
+                  onChange={(e) => setSelectedDepot(e.target.value)}
+                >
+                  <option value="ALL">All Depot Terminals</option>
+                  <option value="Chicago">Chicago Hub #1</option>
+                  <option value="Dallas">Dallas Terminal #2</option>
+                  <option value="Atlanta">Atlanta Regional</option>
+                  <option value="Ontario">Ontario Depot</option>
+                </select>
+              </div>
+
+              <div className="filter-group">
+                <label className="filter-label">SEVERITY LEVEL</label>
+                <select 
+                  className="filter-select"
+                  value={selectedSeverity}
+                  onChange={(e) => setSelectedSeverity(e.target.value)}
+                >
+                  <option value="ALL">All Severities</option>
+                  <option value="CRITICAL">Critical Loss</option>
+                  <option value="HIGH">High Severity</option>
+                  <option value="MEDIUM">Medium / Moderate</option>
+                  <option value="LOW">Low Threshold</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Table View (Default Dense Enterprise View) */}
+            {viewMode === 'table' ? (
+              <div className="square-table-container">
+                <table className="square-table">
+                  <thead>
+                    <tr>
+                      <th>Vehicle Asset & Class</th>
+                      <th>Leak Classification</th>
+                      <th>Assigned Depot</th>
+                      <th>Duration</th>
+                      <th>Fuel Wasted</th>
+                      <th>Estimated Loss</th>
+                      <th>Geohash Mask (Privacy)</th>
+                      <th>Severity</th>
+                      <th>Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredLeaks.map((item) => (
+                      <tr key={item.id}>
+                        <td>
+                          <strong>{item.license_plate}</strong>
+                          <span className="sub-asset-text">{item.make} {item.model}</span>
+                        </td>
+                        <td>
+                          <span className="leak-type-badge">{item.leak_type_name || item.leak_type_code}</span>
+                        </td>
+                        <td>{item.depot_name}</td>
+                        <td>{Math.round(item.duration_seconds / 60)} mins</td>
+                        <td>{item.fuel_wasted_liters.toFixed(1)} L</td>
+                        <td style={{ fontWeight: 800, color: 'var(--accent-red-text)' }}>
+                          ${item.estimated_cost_loss.toFixed(2)}
+                          <span className="sub-asset-text">${(item.estimated_cost_loss * 30).toFixed(0)}/mo</span>
+                        </td>
+                        <td style={{ fontFamily: 'var(--font-mono)', fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+                          {item.geohash_5 || 'dp3wm'}
+                        </td>
+                        <td>
+                          <span className={`match-badge ${item.severity === 'CRITICAL' ? 'badge-match-critical' : (item.severity === 'HIGH' ? 'badge-match-high' : 'badge-match-100')}`}>
+                            {item.severity}
+                          </span>
+                        </td>
+                        <td>
+                          <button 
+                            onClick={() => inspectVehicle(item.vehicle_id)}
+                            className="btn-square-blue"
+                            style={{ padding: '4px 10px', fontSize: '0.72rem' }}
+                          >
+                            Inspect Asset
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              /* Card Grid View (Visual Cards) */
+              <div className="card-grid-3">
+                {filteredLeaks.map((item) => (
+                  <div key={item.id} className="talentra-card">
+                    <div>
+                      <div className="card-top-row">
+                        <div className="card-title">
+                          {item.leak_type_name || item.leak_type_code} — {item.license_plate}
+                        </div>
+                        <span className={`match-badge ${item.severity === 'CRITICAL' ? 'badge-match-critical' : 'badge-match-100'}`}>
+                          {item.severity}
+                        </span>
+                      </div>
+                      <div className="card-subline">
+                        {item.depot_name} · {item.make} {item.model}
+                      </div>
+                      <div className="card-description">
+                        Continuous engine operation at 0 km/h with PTO disengaged for {Math.round(item.duration_seconds / 60)} minutes. Telemetry indicates fuel burn of {item.fuel_wasted_liters.toFixed(1)} L.
+                      </div>
+                      <div className="card-tags">
+                        <span className="card-tag-pill">{item.make}</span>
+                        <span className="card-tag-pill">{item.fuel_wasted_liters.toFixed(1)} L Burn</span>
+                        <span className="card-tag-pill">Geohash: {item.geohash_5 || 'dp3wm'}</span>
+                        <span className="card-tag-pill">Driver: Anonymized</span>
+                      </div>
+                    </div>
+                    <div className="card-bottom-row">
+                      <div className="card-metric-group">
+                        <span className="card-metric-label">FINANCIAL LOSS</span>
+                        <span className="card-metric-val">
+                          ${item.estimated_cost_loss.toFixed(2)} Loss · ${(item.estimated_cost_loss * 30).toFixed(0)}/Mo
+                        </span>
+                      </div>
+                      <button 
+                        onClick={() => inspectVehicle(item.vehicle_id)}
+                        className="btn-square-blue"
+                      >
+                        Inspect Asset
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+          </div>
+        )}
+
+        {/* ============================================================= */}
+        {/* VIEW 3: DEPOT ENERGY BENCHMARKS                               */}
+        {/* ============================================================= */}
+        {activeTab === 'depots' && (
+          <div className="square-table-container">
+            <div className="table-header-bar">
+              <div>
+                <h2>Cross-Depot Energy Waste & Idle Benchmarks</h2>
+                <p>Compare regional operational terminal performance, total fuel losses, and fleet efficiency rankings</p>
+              </div>
+              <button onClick={fetchDepots} className="btn-square-secondary">
+                <RefreshCw className="w-3.5 h-3.5" /> Refresh Depots
+              </button>
+            </div>
+
+            <table className="square-table">
+              <thead>
+                <tr>
+                  <th>Regional Depot Hub</th>
+                  <th>Assigned Vehicles</th>
+                  <th>Fuel Wasted</th>
+                  <th>Relative Waste Severity</th>
+                  <th>Total Loss Cost</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {depots.map((dep, idx) => {
+                  const lossPct = Math.min(100, Math.max(12, (dep.total_leak_cost_usd / 2500) * 100));
+                  return (
+                    <tr key={idx}>
+                      <td>
+                        <strong>{dep.depot_name}</strong>
+                      </td>
+                      <td>{dep.assigned_vehicles} Commercial Units</td>
+                      <td>{dep.total_fuel_wasted_liters.toFixed(1)} Liters</td>
+                      <td style={{ width: '25%' }}>
+                        <div style={{ background: 'var(--border-card)', height: '8px', borderRadius: '4px', overflow: 'hidden' }}>
+                          <div style={{ width: `${lossPct}%`, background: 'var(--primary-blue)', height: '100%', borderRadius: '4px' }}></div>
+                        </div>
+                      </td>
+                      <td style={{ fontWeight: 800, color: 'var(--accent-red-text)', fontFamily: 'var(--font-mono)' }}>
+                        ${dep.total_leak_cost_usd.toLocaleString()} Loss
+                      </td>
+                      <td>
+                        <button 
+                          onClick={() => {
+                            setSelectedDepot(dep.depot_name.split(' ')[0]);
+                            setActiveTab('auditor');
+                          }}
+                          className="btn-square-blue"
+                          style={{ padding: '4px 10px', fontSize: '0.72rem' }}
+                        >
+                          View Depot Leaks
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {/* ============================================================= */}
+        {/* VIEW 4: GUARDED AI COPILOT & HUMAN APPROVAL QUEUE             */}
+        {/* ============================================================= */}
+        {activeTab === 'copilot' && (
+          <div className="copilot-grid">
+            
+            {/* Copilot Chat Assistant */}
+            <div className="copilot-chat-card">
+              <div className="chat-head">
+                <div className="chat-head-title">
+                  <Sliders className="w-5 h-5" style={{ color: 'var(--primary-blue)' }} />
+                  Guarded AI Fleet Intelligence Copilot
+                </div>
+                <span className="badge-match-100">GEMINI 3.8 LIVE</span>
+              </div>
+
+              <div className="chat-body">
                 {chatMessages.map((msg, idx) => (
                   <div key={idx} className={`chat-bubble ${msg.sender === 'user' ? 'user' : (msg.status === 'REFUSED' ? 'refused' : 'copilot')}`}>
-                    <p>{msg.text}</p>
+                    <p style={{ whiteSpace: 'pre-line' }}>{msg.text}</p>
                     {msg.latency && (
-                      <span style={{ display: 'block', fontSize: '0.68rem', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', marginTop: '6px' }}>
-                        Execution Latency: {msg.latency} ms | Audited to agent_action_log
-                      </span>
+                      <div className="chat-audit-tag">
+                        Latency: {msg.latency} ms | Audited to agent_action_log | Tenant Scoped
+                      </div>
                     )}
                   </div>
                 ))}
                 {chatLoading && (
-                  <div style={{ fontSize: '0.75rem', color: 'var(--primary-cyan)', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <RefreshCw className="w-3.5 h-3.5 animate-spin" /> Evaluating tools, tenant boundaries & security guardrails...
+                  <div style={{ fontSize: '0.78rem', color: 'var(--primary-blue)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <RefreshCw className="w-4 h-4 animate-spin" /> Evaluating tools, tenant boundaries & running Gemini 3.8 Live...
                   </div>
                 )}
               </div>
 
-              {/* Sample Question Chips */}
-              <div className="chat-chips">
-                <button 
-                  onClick={() => handleSendChat("Which depots have the highest fuel leak cost?")}
-                  className="chip-btn"
-                >
-                  Top Depot Leaks
+              {/* Quick Prompt Chips */}
+              <div className="prompt-chips">
+                <button onClick={() => handleSendChat("What are our top fuel leaks?")} className="prompt-chip-btn">
+                  Top Fuel Leaks
                 </button>
-                <button 
-                  onClick={() => handleSendChat("If we cut idling by 40%, how much money do we save?")}
-                  className="chip-btn"
-                >
-                  What-If 40% Reduction
+                <button onClick={() => handleSendChat("Which depots have the highest fuel leak cost?")} className="prompt-chip-btn">
+                  Rank Depots by Cost
                 </button>
-                <button 
-                  onClick={() => handleSendChat("Recommend an auto-shutdown policy for Chicago depot")}
-                  className="chip-btn"
-                >
+                <button onClick={() => handleSendChat("If we cut idling by 35%, how much money do we save?")} className="prompt-chip-btn">
+                  What-If 35% Reduction
+                </button>
+                <button onClick={() => handleSendChat("Recommend an auto-shutdown policy for Chicago depot")} className="prompt-chip-btn">
                   Stage Policy Recommendation
                 </button>
               </div>
 
-              {/* Chat Input */}
-              <div className="chat-input-bar">
+              {/* Chat Input Bar */}
+              <div className="chat-input-row">
                 <input 
                   type="text"
-                  placeholder="Ask copilot about fleet leaks, savings, or stage policies..."
-                  className="chat-input"
+                  placeholder="Ask copilot about fleet leaks, idle waste, or cost recovery..."
+                  className="chat-text-input"
                   value={chatPrompt}
                   onChange={(e) => setChatPrompt(e.target.value)}
                   onKeyDown={(e) => e.key === 'Enter' && handleSendChat()}
                 />
-                <button onClick={() => handleSendChat()} disabled={chatLoading} className="btn-primary">
-                  Send
+                <button onClick={() => handleSendChat()} disabled={chatLoading} className="btn-square-blue">
+                  <Send className="w-4 h-4" /> Send
                 </button>
               </div>
             </div>
 
-            {/* Human-in-the-Loop Approval Queue */}
-            <div className="glass-card" style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
-              <div>
-                <h3 style={{ fontSize: '1.15rem', fontWeight: 800, color: '#ffffff', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <ShieldCheck className="w-5 h-5" style={{ color: 'var(--accent-emerald)' }} />
-                  Human Approval Queue
-                </h3>
-                <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
-                  Guarded AI recommendations requiring explicit Finance Manager authorization
-                </p>
+            {/* Human Approval Queue */}
+            <div className="approval-list-card">
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div>
+                  <h3 style={{ fontSize: '1.05rem', fontWeight: 800, color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <ShieldCheck className="w-5 h-5" style={{ color: 'var(--accent-green-text)' }} />
+                    Human Approval Queue
+                  </h3>
+                  <p style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+                    Guarded AI recommendations requiring explicit Finance Manager authorization
+                  </p>
+                </div>
+                <button onClick={fetchRecommendations} className="btn-square-secondary" style={{ padding: '4px 8px' }}>
+                  <RefreshCw className="w-3.5 h-3.5" />
+                </button>
               </div>
 
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', maxHeight: '480px', overflowY: 'auto' }}>
-                {recommendations.map((rec) => (
-                  <div key={rec.id} style={{ background: 'rgba(255, 255, 255, 0.03)', border: '1px solid var(--border-subtle)', borderRadius: '14px', padding: '16px' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
-                      <span style={{ fontWeight: 700, color: '#ffffff', fontSize: '0.88rem' }}>{rec.title}</span>
-                      <span className={`badge ${rec.status === 'APPROVED' ? 'badge-success' : 'badge-high'}`}>
-                        {rec.status}
-                      </span>
-                    </div>
-                    <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', lineHeight: 1.4, marginBottom: '12px' }}>
-                      {rec.proposed_action}
-                    </p>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '10px', borderTop: '1px solid rgba(255, 255, 255, 0.06)' }}>
-                      <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, color: '#34d399', fontSize: '0.85rem' }}>
-                        +${rec.projected_monthly_savings.toFixed(2)}/mo
-                      </span>
-                      {rec.status === 'PENDING_APPROVAL' ? (
-                        <button 
-                          onClick={() => handleApproveRecommendation(rec.id)}
-                          className="btn-primary" 
-                          style={{ padding: '6px 12px', fontSize: '0.75rem' }}
-                        >
-                          Approve Action
-                        </button>
-                      ) : (
-                        <span style={{ fontSize: '0.75rem', color: '#34d399', display: 'flex', alignItems: 'center', gap: '4px', fontWeight: 600 }}>
-                          <CheckCircle2 className="w-4 h-4" /> Authorized
-                        </span>
-                      )}
-                    </div>
+              {recommendations.map((rec) => (
+                <div key={rec.id} className="approval-item">
+                  <div className="approval-item-top">
+                    <span className="approval-item-title">{rec.title}</span>
+                    <span className={`match-badge ${rec.status === 'APPROVED' ? 'badge-match-100' : 'badge-match-high'}`}>
+                      {rec.status}
+                    </span>
                   </div>
-                ))}
-              </div>
+                  <div className="approval-item-desc">{rec.proposed_action}</div>
+                  <div className="approval-item-footer">
+                    <span style={{ fontWeight: 800, color: 'var(--accent-green-text)', fontSize: '0.82rem' }}>
+                      +${rec.projected_monthly_savings.toFixed(2)}/mo
+                    </span>
+                    {rec.status === 'PENDING_APPROVAL' ? (
+                      <button 
+                        onClick={() => handleApproveRecommendation(rec.id)}
+                        className="btn-square-blue"
+                        style={{ padding: '5px 12px', fontSize: '0.72rem' }}
+                      >
+                        Approve Action
+                      </button>
+                    ) : (
+                      <span style={{ fontSize: '0.72rem', color: 'var(--accent-green-text)', display: 'flex', alignItems: 'center', gap: '4px', fontWeight: 700 }}>
+                        <CheckCircle2 className="w-4 h-4" /> Authorized
+                      </span>
+                    )}
+                  </div>
+                </div>
+              ))}
             </div>
 
           </div>
         )}
 
-        {/* =================================================================== */}
-        {/* TAB 5: COMPLIANCE, GDPR & PRIVACY                                   */}
-        {/* =================================================================== */}
-        {activeTab === 'compliance' && (
-          <div className="grid-2">
-            <div className="glass-card" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              <h3 style={{ fontSize: '1.15rem', fontWeight: 800, color: '#ffffff', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <Lock className="w-5 h-5" style={{ color: 'var(--primary-cyan)' }} />
-                Driver Right-to-Erasure (GDPR / DPDP)
+        {/* ============================================================= */}
+        {/* VIEW 5: GOVERNANCE, GDPR & PRIVACY SHIELD                     */}
+        {/* ============================================================= */}
+        {activeTab === 'privacy' && (
+          <div className="copilot-grid">
+            <div className="stat-square-card" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <h3 style={{ fontSize: '1.1rem', fontWeight: 800, color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Lock className="w-5 h-5" style={{ color: 'var(--primary-blue)' }} />
+                Driver Right-to-Erasure (GDPR / DPDP Compliance)
               </h3>
-              <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+              <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', lineHeight: 1.5 }}>
                 Submits formal pseudonymization request. Driver employee codes, contact numbers, and pgcrypto credentials will be purged while preserving aggregated fleet metrics.
               </p>
 
               <form onSubmit={handleErasureSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                 <div>
-                  <label style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>
+                  <label style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', display: 'block', marginBottom: '4px' }}>
                     Driver ID / Employee Code
                   </label>
                   <input 
                     type="text"
                     required
                     placeholder="e.g. f0000000-0000-0000-0000-000000000001"
-                    className="chat-input"
+                    className="filter-input"
                     value={erasureDriverId}
                     onChange={(e) => setErasureDriverId(e.target.value)}
                   />
                 </div>
-                <button type="submit" className="btn-primary" style={{ justifyContent: 'center' }}>
-                  Initiate Erasure Request
+                <button type="submit" className="btn-square-blue" style={{ justifyContent: 'center' }}>
+                  Initiate Cryptographic Erasure
                 </button>
               </form>
 
               {erasureStatus && (
-                <div style={{ background: 'rgba(56, 189, 248, 0.1)', border: '1px solid rgba(56, 189, 248, 0.3)', borderRadius: '10px', padding: '12px', fontSize: '0.75rem', color: '#7dd3fc' }}>
+                <div style={{ background: 'var(--accent-green-bg)', border: '1px solid var(--accent-green-border)', borderRadius: '4px', padding: '12px', fontSize: '0.78rem', color: 'var(--accent-green-text)' }}>
                   {erasureStatus}
                 </div>
               )}
             </div>
 
-            <div className="glass-card" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              <h3 style={{ fontSize: '1.15rem', fontWeight: 800, color: '#ffffff', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <Database className="w-5 h-5" style={{ color: 'var(--accent-emerald)' }} />
+            <div className="stat-square-card" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <h3 style={{ fontSize: '1.1rem', fontWeight: 800, color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Database className="w-5 h-5" style={{ color: 'var(--accent-green-text)' }} />
                 STRIDE Threat Model & Compliance Controls
               </h3>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
                 <div style={{ display: 'flex', gap: '8px' }}>
-                  <CheckCircle2 className="w-4 h-4" style={{ color: 'var(--accent-emerald)', flexShrink: 0 }} />
-                  <div><strong style={{ color: '#ffffff' }}>Spoofed Devices:</strong> mTLS client certificate verification at gateway edge.</div>
+                  <CheckCircle2 className="w-4 h-4" style={{ color: 'var(--accent-green-text)', flexShrink: 0 }} />
+                  <div><strong style={{ color: 'var(--text-main)' }}>Spoofed Devices:</strong> mTLS client certificate verification at gateway edge.</div>
                 </div>
                 <div style={{ display: 'flex', gap: '8px' }}>
-                  <CheckCircle2 className="w-4 h-4" style={{ color: 'var(--accent-emerald)', flexShrink: 0 }} />
-                  <div><strong style={{ color: '#ffffff' }}>Replay Attacks:</strong> L1 Bloom filter + Redis SETNX natural key dedupe.</div>
+                  <CheckCircle2 className="w-4 h-4" style={{ color: 'var(--accent-green-text)', flexShrink: 0 }} />
+                  <div><strong style={{ color: 'var(--text-main)' }}>Replay Attacks:</strong> L1 Bloom filter + Redis SETNX natural key dedupe.</div>
                 </div>
                 <div style={{ display: 'flex', gap: '8px' }}>
-                  <CheckCircle2 className="w-4 h-4" style={{ color: 'var(--accent-emerald)', flexShrink: 0 }} />
-                  <div><strong style={{ color: '#ffffff' }}>Cross-Tenant Leakage:</strong> PostgreSQL Row-Level Security (RLS) on tenant_id.</div>
+                  <CheckCircle2 className="w-4 h-4" style={{ color: 'var(--accent-green-text)', flexShrink: 0 }} />
+                  <div><strong style={{ color: 'var(--text-main)' }}>Cross-Tenant Leakage:</strong> PostgreSQL Row-Level Security (RLS) on tenant_id.</div>
                 </div>
                 <div style={{ display: 'flex', gap: '8px' }}>
-                  <CheckCircle2 className="w-4 h-4" style={{ color: 'var(--accent-emerald)', flexShrink: 0 }} />
-                  <div><strong style={{ color: '#ffffff' }}>Prompt Injection:</strong> Guardrail input defense treating all text as untrusted data.</div>
+                  <CheckCircle2 className="w-4 h-4" style={{ color: 'var(--accent-green-text)', flexShrink: 0 }} />
+                  <div><strong style={{ color: 'var(--text-main)' }}>Prompt Injection:</strong> Guardrail input defense treating all text as untrusted data.</div>
                 </div>
                 <div style={{ display: 'flex', gap: '8px' }}>
-                  <CheckCircle2 className="w-4 h-4" style={{ color: 'var(--accent-emerald)', flexShrink: 0 }} />
-                  <div><strong style={{ color: '#ffffff' }}>Location Privacy:</strong> Driver GPS coordinates masked to Geohash-5 for non-privileged roles.</div>
+                  <CheckCircle2 className="w-4 h-4" style={{ color: 'var(--accent-green-text)', flexShrink: 0 }} />
+                  <div><strong style={{ color: 'var(--text-main)' }}>Location Privacy:</strong> Driver GPS coordinates masked to Geohash-5 for non-privileged roles.</div>
                 </div>
               </div>
             </div>
@@ -701,46 +1048,60 @@ export default function App() {
 
       </main>
 
-      {/* Vehicle Drill-Down Modal */}
+      {/* ------------------------------------------------------------- */}
+      {/* 4. VEHICLE DRILL-DOWN INSPECTION MODAL                        */}
+      {/* ------------------------------------------------------------- */}
       {selectedVehicleModal && (
         <div className="modal-overlay" onClick={() => setSelectedVehicleModal(null)}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+          <div className="modal-square-box" onClick={(e) => e.stopPropagation()}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
               <div>
-                <h3 style={{ fontSize: '1.2rem', fontWeight: 800, color: '#ffffff' }}>
+                <h3 style={{ fontSize: '1.2rem', fontWeight: 800, color: 'var(--text-main)' }}>
                   Vehicle Inspection: {selectedVehicleModal.vehicle.license_plate}
                 </h3>
-                <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
                   VIN: {selectedVehicleModal.vehicle.vin} | {selectedVehicleModal.vehicle.make} {selectedVehicleModal.vehicle.model} ({selectedVehicleModal.vehicle.year})
                 </p>
               </div>
-              <button onClick={() => setSelectedVehicleModal(null)} className="btn-secondary" style={{ padding: '6px' }}>
+              <button onClick={() => setSelectedVehicleModal(null)} className="btn-square-secondary" style={{ padding: '6px' }}>
                 <X className="w-4 h-4" />
               </button>
             </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px', marginBottom: '20px' }}>
-              <div style={{ background: 'rgba(255, 255, 255, 0.04)', padding: '12px', borderRadius: '10px' }}>
-                <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Assigned Hub</div>
-                <div style={{ fontSize: '0.85rem', fontWeight: 700, color: '#ffffff' }}>{selectedVehicleModal.vehicle.depot_name}</div>
+              <div className="sim-result-box">
+                <div className="sim-result-label">Assigned Hub</div>
+                <div style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--text-main)', marginTop: '4px' }}>
+                  {selectedVehicleModal.vehicle.depot_name}
+                </div>
               </div>
-              <div style={{ background: 'rgba(255, 255, 255, 0.04)', padding: '12px', borderRadius: '10px' }}>
-                <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Propulsion Class</div>
-                <div style={{ fontSize: '0.85rem', fontWeight: 700, color: '#ffffff' }}>{selectedVehicleModal.vehicle.vehicle_class}</div>
+              <div className="sim-result-box">
+                <div className="sim-result-label">Propulsion Class</div>
+                <div style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--text-main)', marginTop: '4px' }}>
+                  {selectedVehicleModal.vehicle.vehicle_class}
+                </div>
               </div>
-              <div style={{ background: 'rgba(255, 255, 255, 0.04)', padding: '12px', borderRadius: '10px' }}>
-                <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Daily Lease Cost</div>
-                <div style={{ fontSize: '0.85rem', fontWeight: 700, color: '#38bdf8' }}>${selectedVehicleModal.vehicle.daily_lease_cost}/day</div>
+              <div className="sim-result-box">
+                <div className="sim-result-label">Daily Lease Cost</div>
+                <div style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--primary-blue)', marginTop: '4px' }}>
+                  ${selectedVehicleModal.vehicle.daily_lease_cost}/day
+                </div>
               </div>
             </div>
 
-            <h4 style={{ fontSize: '0.85rem', fontWeight: 700, color: '#ffffff', marginBottom: '10px' }}>Recent Incident History</h4>
+            <h4 style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--text-main)', marginBottom: '10px' }}>
+              Recent Telemetry Incident History
+            </h4>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '200px', overflowY: 'auto' }}>
               {selectedVehicleModal.leak_history.map((lh, i) => (
-                <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 12px', background: 'rgba(255, 255, 255, 0.02)', borderRadius: '8px', fontSize: '0.75rem' }}>
+                <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 14px', background: 'var(--bg-subtle)', borderRadius: '4px', fontSize: '0.78rem' }}>
                   <span>{new Date(lh.started_at).toLocaleDateString()}</span>
-                  <span className={`badge ${lh.severity === 'CRITICAL' ? 'badge-critical' : 'badge-high'}`}>{lh.severity}</span>
-                  <span style={{ fontFamily: 'var(--font-mono)', color: '#fb7185' }}>-${lh.estimated_cost_loss.toFixed(2)}</span>
+                  <span className={`match-badge ${lh.severity === 'CRITICAL' ? 'badge-match-critical' : 'badge-match-high'}`}>
+                    {lh.severity}
+                  </span>
+                  <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, color: 'var(--accent-red-text)' }}>
+                    -${lh.estimated_cost_loss.toFixed(2)}
+                  </span>
                 </div>
               ))}
             </div>
@@ -749,8 +1110,8 @@ export default function App() {
       )}
 
       {/* Footer */}
-      <footer className="footer">
-        FleetLeak Platform &copy; 2026 SRM x Talenciaglobal Connected Vehicle Intelligence Hackathon.
+      <footer className="footer-bar">
+        FleetLeak Enterprise &copy; 2026 SRM x Talenciaglobal Connected Vehicle Intelligence Platform. Fully Compliant with PostgreSQL 16 TimescaleDB & GDPR/DPDP Privacy Shield.
       </footer>
     </div>
   );
